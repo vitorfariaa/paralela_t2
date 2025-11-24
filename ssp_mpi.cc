@@ -167,7 +167,7 @@ static inline auto comparador (const Pair <String,String>& a, const Pair <String
 }
 
 // melhoria: remove cadeias que sao substrings de outras
-static auto remove_strings_repetidass (const Set <String>& ss) -> Set <String>
+static auto remove_strings_repetidas (const Set <String>& ss) -> Set <String>
 {
     vector <String> v (ss.begin (), ss.end ());
     Size const n = v.size ();
@@ -462,7 +462,7 @@ auto main (int argc, char const* argv[]) -> int
     vector <String> inicial ;
     if (rank == 0) {
         Set <String> ss_in = read_strings_from_standard_input ();
-        ss_in = remove_strings_repetidass (ss_in);
+        ss_in = remove_strings_repetidas (ss_in);
         inicial.assign (ss_in.begin (), ss_in.end ());
     }
 
@@ -490,7 +490,7 @@ auto main (int argc, char const* argv[]) -> int
     #else
     auto start = chrono :: high_resolution_clock :: now ();
     Set <String> ss = read_strings_from_standard_input ();
-    ss = remove_redundant_substrings (ss);
+    ss = remove_strings_repetidas (ss);
     write_string_to_standard_ouput (shortest_superstring (ss));
     auto end = chrono :: high_resolution_clock :: now ();
 
