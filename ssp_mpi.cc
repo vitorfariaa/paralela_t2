@@ -452,50 +452,74 @@ inline auto write_string_to_standard_ouput (const String& s) -> void
 
 auto main (int argc, char const* argv[]) -> int
 {
-    #ifdef USE_MPI
+#ifdef USE_MPI
     MPI_Init (&argc, (char***) &argv);
 
-    int rank = 0 ;
+    int rank = 0;
     MPI_Comm_rank (MPI_COMM_WORLD, &rank);
 
     // leitura apenas no rank 0
-    vector <String> inicial ;
+    std::vector<String> inicial;
     if (rank == 0) {
-        Set <String> ss_in = read_strings_from_standard_input ();
-        ss_in = remove_strings_repetidas (ss_in);
+        Set<String> ss_in = read_strings_from_standard_input ();
+        ss_in = remove_strings_repetidas (ss_in);   // sua melhoria de substrings
         inicial.assign (ss_in.begin (), ss_in.end ());
     }
 
     // distribui as strings para todos os processos
     broadcast_das_strings (inicial);
 
-    Set <String> ss ;
+    Set<String> ss;
     for (const auto& s : inicial) {
         ss.insert (s);
     }
 
-    auto start = chrono :: high_resolution_clock :: now ();
-    String resultado = shortest_superstring (ss);
-    auto end = chrono :: high_resolution_clock :: now ();
+    tempo_paralelo = 0.0; // zera acumulador da parte "paralela"
 
-    double total = chrono :: duration <double> (end - start).count ();
+    auto start = chrono::high_resolution_clock::now ();
+    String resultado = shortest_superstring (ss);
+    auto end   = chrono::high_resolution_clock::now ();
+
+    double elapsed   = chrono::duration<double> (end - start).count ();
+    double par_time  = tempo_paralelo;
+    double seq_time  = elapsed - par_time;
+    double seq_frac  = (elapsed > 0.0) ? (seq_time / elapsed) : 0.0;
 
     if (rank == 0) {
+        // stdout: superstring + tempo total (o script usa só a última linha)
         write_string_to_standard_ouput (resultado);
-        cout << ((total - tempo_paralelo) / total) * 100 << "%\n";
+        std::cout << elapsed << '\n';
+
+        // stderr: elapsed par_time seq_frac (o script MPI ignora, mas não atrapalha)
+        std::cerr << elapsed << ' ' << par_time << ' ' << seq_frac << '\n';
     }
 
     MPI_Finalize ();
     return 0;
-    #else
-    auto start = chrono :: high_resolution_clock :: now ();
-    Set <String> ss = read_strings_from_standard_input ();
-    ss = remove_strings_repetidas (ss);
-    write_string_to_standard_ouput (shortest_superstring (ss));
-    auto end = chrono :: high_resolution_clock :: now ();
 
-    double total = chrono :: duration <double> (end - start).count ();
-    cout << ((total - tempo_paralelo) / total) * 100 << "%\n";
+#else
+    tempo_paralelo = 0.0; // zera acumulador
+
+    Set<String> ss = read_strings_from_standard_input ();
+    ss = remove_strings_repetidas (ss);  // mesma melhoria
+
+    auto start = chrono::high_resolution_clock::now ();
+    String resultado = shortest_superstring (ss);
+    auto end   = chrono::high_resolution_clock::now ();
+
+    double elapsed   = chrono::duration<double> (end - start).count ();
+    double par_time  = tempo_paralelo;
+    double seq_time  = elapsed - par_time;
+    double seq_frac  = (elapsed > 0.0) ? (seq_time / elapsed) : 0.0;
+
+    // stdout: superstring + tempo total
+    write_string_to_standard_ouput (resultado);
+    std::cout << elapsed << '\n';
+
+    // stderr: elapsed par_time seq_frac (é isso que o seq.sbatch lê)
+    std::cerr << elapsed << ' ' << par_time << ' ' << seq_frac << '\n';
+
     return 0;
-    #endif
+#endif
 }
+

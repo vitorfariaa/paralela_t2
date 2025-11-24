@@ -1,0 +1,16 @@
+tza@nomade:~/mpi_vitor/paralela_t2/results$ cat seq_times.csv
+input,tempo,sd
+input_200.txt,1.383077,0.015439
+input_210.txt,1.309719,0.016269
+input_220.txt,1.231737,0.010273
+input_230.txt,1.178680,0.011152
+input_240.txt,1.131956,0.012250
+input_250.txt,1.097478,0.011871
+input_260.txt,1.046218,0.011289
+input_270.txt,1.014740,0.010474
+input_280.txt,0.979947,0.010401
+input_290.txt,0.946058,0.009557
+input_300.txt,0.926137,0.010780
+input_310.txt,0.898356,0.007862
+input_320.txt,0.872206,0.007338
+input_330.txt,0.847868,0.011265
