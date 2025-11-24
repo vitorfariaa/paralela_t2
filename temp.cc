@@ -82,7 +82,8 @@ static double tempo_paralelo = 0.0; // acumula o tempo da parte paralelizavel
 // parte sequencial 
 // definicoes do enunciado: prefixo, sufixo, overlap, etc
 
-inline auto is_prefix (const String& a, const String& b) -> Boolean
+inline auto 
+Boolean is_prefix (const String& a, const String& b)
 {
     if (size (a) > size (b)) return false;
     if (! (std::mismatch(a.begin(), a.end(), b.begin()).first == a.end())) return false;
@@ -166,8 +167,8 @@ static inline auto comparador (const Pair <String,String>& a, const Pair <String
     return (a.first < b.first) || (a.first == b.first && a.second < b.second);
 }
 
-// melhoria: remove cadeias que sao substrings de outras
-static auto remove_strings_repetidass (const Set <String>& ss) -> Set <String>
+// pequena melhoria: remove cadeias que sao substrings de outras
+static auto remove_redundant_substrings (const Set <String>& ss) -> Set <String>
 {
     vector <String> v (ss.begin (), ss.end ());
     Size const n = v.size ();
@@ -195,7 +196,7 @@ static auto remove_strings_repetidass (const Set <String>& ss) -> Set <String>
     return out;
 }
 
-// versao sequencial do resolvedor
+// versao sequencial do resolvedor (usada quando o codigo e compilado sem USE_MPI)
 static auto resolvedor_ssp_sequencial (const vector <String>& v) -> Pair <String,String>
 {
     auto t0 = chrono :: high_resolution_clock :: now ();
@@ -204,14 +205,15 @@ static auto resolvedor_ssp_sequencial (const vector <String>& v) -> Pair <String
     Pair <String,String> melhor = make_pair (v [0], v [1]);
     auto melhor_ov = overlap_value (melhor.first, melhor.second);
 
-    for (int i = 0 ; i < n ; i++) {
-        for (int j = 0 ; j < n ; j++) {
+    for (int i = 0 ; i < n ; ++i) {
+        for (int j = 0 ; j < n ; ++j) {
             if (i == j) continue;
 
             Pair <String,String> atual = make_pair (v [i], v [j]);
             auto ov = overlap_value (atual.first, atual.second);
 
-            if ( ov > melhor_ov || (ov == melhor_ov && comparador (atual, melhor)) )
+            if ( ov > melhor_ov
+              || (ov == melhor_ov && comparador (atual, melhor)) )
             {
                 melhor    = atual;
                 melhor_ov = ov;
@@ -230,7 +232,7 @@ static int mpi_rank = 0 ;
 static int mpi_size = 1 ;
 
 // faz o broadcast de um vetor de strings a partir do rank 0
-static auto broadcast_das_strings (vector <String>& v) -> void
+static auto bcast_strings (vector <String>& v) -> void
 {
     int root = 0 ;
     MPI_Comm_rank (MPI_COMM_WORLD, &mpi_rank);
@@ -246,7 +248,7 @@ static auto broadcast_das_strings (vector <String>& v) -> void
 
     vector <int> lens (n);
     if (mpi_rank == root) {
-        for (int i = 0 ; i < n ; i++) {
+        for (int i = 0 ; i < n ; ++i) {
             lens [i] = (int) v [i].size ();
         }
     }
@@ -254,7 +256,7 @@ static auto broadcast_das_strings (vector <String>& v) -> void
     MPI_Bcast (lens.data (), n, MPI_INT, root, MPI_COMM_WORLD);
 
     int total = 0 ;
-    for (int i = 0 ; i < n ; i++) total += lens [i];
+    for (int i = 0 ; i < n ; ++i) total += lens [i];
 
     vector <char> buf ((Size) total);
     if (mpi_rank == root) {
@@ -284,7 +286,7 @@ static inline auto linear_to_pair (long long k, int n, int& i, int& j) -> void
     j = (r < i) ? r : (r + 1);
 }
 
-// resolvedor paralelo usando MPI -> divide o espaco de pares (i,j) entre os processos
+// resolvedor paralelo usando MPI: divide o espaco de pares (i,j) entre os processos
 static auto resolvedor_ssp_mpi (const vector <String>& v) -> Pair <String,String>
 {
     int n = (int) v.size ();
@@ -300,7 +302,7 @@ static auto resolvedor_ssp_mpi (const vector <String>& v) -> Pair <String,String
     long long ini = (total * mpi_rank) / mpi_size;
     long long fim = (total * (mpi_rank + 1)) / mpi_size;
 
-    Pair <String,String> melhor_local;
+    Pair <String,String> melhor_local ;
     int melhor_local_ov = -1 ;
 
     auto t0 = chrono :: high_resolution_clock :: now ();
@@ -312,7 +314,9 @@ static auto resolvedor_ssp_mpi (const vector <String>& v) -> Pair <String,String
         Pair <String,String> atual = make_pair (v [i], v [j]);
         int ov = (int) overlap_value (atual.first, atual.second);
 
-        if (melhor_local_ov < 0 || ov > melhor_local_ov || (ov == melhor_local_ov && comparador (atual, melhor_local)))
+        if (melhor_local_ov < 0
+         || ov > melhor_local_ov
+         || (ov == melhor_local_ov && comparador (atual, melhor_local)))
         {
             melhor_local    = atual;
             melhor_local_ov = ov;
@@ -328,13 +332,13 @@ static auto resolvedor_ssp_mpi (const vector <String>& v) -> Pair <String,String
         tempo_paralelo += max_time;
     }
 
-    struct Melhor {
+    struct SimpleBest {
         int ov ;
         int i  ;
         int j  ;
     };
 
-    Melhor local_best ;
+    SimpleBest local_best ;
     local_best.ov = melhor_local_ov;
     local_best.i  = -1;
     local_best.j  = -1;
@@ -356,26 +360,30 @@ static auto resolvedor_ssp_mpi (const vector <String>& v) -> Pair <String,String
         }
     }
 
-    vector <Melhor> all;
+    vector <SimpleBest> all;
     void* recvbuf = nullptr;
     if (mpi_rank == 0) {
         all.resize (mpi_size);
         recvbuf = static_cast <void*> (all.data ());
     }
 
-    MPI_Gather (&local_best, sizeof (Melhor), MPI_BYTE, recvbuf,    sizeof (Melhor), MPI_BYTE, 0, MPI_COMM_WORLD);
+    MPI_Gather (&local_best, sizeof (SimpleBest), MPI_BYTE,
+                recvbuf,    sizeof (SimpleBest), MPI_BYTE,
+                0, MPI_COMM_WORLD);
 
     int best_i = 0, best_j = 1;
     int best_ov = -1;
 
     if (mpi_rank == 0) {
-        for (int r = 0 ; r < mpi_size ; r++) {
+        for (int r = 0 ; r < mpi_size ; ++r) {
             if (all [r].ov < 0) continue;
 
             Pair <String,String> atual = make_pair (v [all [r].i], v [all [r].j]);
             int ov = all [r].ov;
 
-            if ( best_ov < 0 || ov > best_ov || (ov == best_ov && comparador (atual, make_pair (v [best_i], v [best_j]))) )
+            if ( best_ov < 0
+              || ov > best_ov
+              || (ov == best_ov && comparador (atual, make_pair (v [best_i], v [best_j]))) )
             {
                 best_ov = ov;
                 best_i  = all [r].i;
@@ -390,8 +398,9 @@ static auto resolvedor_ssp_mpi (const vector <String>& v) -> Pair <String,String
     return make_pair (v [best_i], v [best_j]);
 }
 
-#endif
+#endif // USE_MPI
 
+// funcao de alto nivel usada pelo kernel guloso
 static auto resolvedor_ssp (const vector <String>& v) -> Pair <String,String>
 {
 #ifdef USE_MPI
@@ -401,6 +410,7 @@ static auto resolvedor_ssp (const vector <String>& v) -> Pair <String,String>
 #endif
 }
 
+// faz o equivalente do "return highest_overlap_value (all_distinct_pairs (ss))";
 auto pair_of_strings_with_highest_overlap_value (const Set <String>& ss) -> Pair <String, String>
 {
     vector <String> v (ss.begin (), ss.end ());
@@ -452,7 +462,7 @@ inline auto write_string_to_standard_ouput (const String& s) -> void
 
 auto main (int argc, char const* argv[]) -> int
 {
-    #ifdef USE_MPI
+#ifdef USE_MPI
     MPI_Init (&argc, (char***) &argv);
 
     int rank = 0 ;
@@ -462,12 +472,12 @@ auto main (int argc, char const* argv[]) -> int
     vector <String> inicial ;
     if (rank == 0) {
         Set <String> ss_in = read_strings_from_standard_input ();
-        ss_in = remove_strings_repetidass (ss_in);
+        ss_in = remove_redundant_substrings (ss_in);
         inicial.assign (ss_in.begin (), ss_in.end ());
     }
 
     // distribui as strings para todos os processos
-    broadcast_das_strings (inicial);
+    bcast_strings (inicial);
 
     Set <String> ss ;
     for (const auto& s : inicial) {
@@ -476,7 +486,7 @@ auto main (int argc, char const* argv[]) -> int
 
     auto start = chrono :: high_resolution_clock :: now ();
     String resultado = shortest_superstring (ss);
-    auto end = chrono :: high_resolution_clock :: now ();
+    auto end   = chrono :: high_resolution_clock :: now ();
 
     double total = chrono :: duration <double> (end - start).count ();
 
@@ -487,7 +497,7 @@ auto main (int argc, char const* argv[]) -> int
 
     MPI_Finalize ();
     return 0;
-    #else
+#else
     auto start = chrono :: high_resolution_clock :: now ();
     Set <String> ss = read_strings_from_standard_input ();
     ss = remove_redundant_substrings (ss);
@@ -497,5 +507,5 @@ auto main (int argc, char const* argv[]) -> int
     double total = chrono :: duration <double> (end - start).count ();
     cout << ((total - tempo_paralelo) / total) * 100 << "%\n";
     return 0;
-    #endif
+#endif
 }
